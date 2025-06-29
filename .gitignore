@@ -1,0 +1,33 @@
+# ─── Node modules & package managers ──────────────────────────────────────────
+/node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ─── Environment configs & secrets ────────────────────────────────────────────
+.env
+.env.*.local
+
+# ─── tsup / esbuild outputs & caches ─────────────────────────────────────────
+# tsup’s default outDir (“dist”) and optional caches
+/dist/
+/.tsup/
+/.esbuild/
+
+# ─── TypeScript & build artifacts ────────────────────────────────────────────
+*.tsbuildinfo     # tsc incremental build cache
+/build/
+/lib/
+/out/
+/coverage/
+
+# ─── Editor / IDE ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+
+# ─── OS files & misc cruft ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log
+*.swp
+*~
