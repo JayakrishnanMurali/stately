@@ -36,12 +36,24 @@ export function create<T extends State>(
     };
   };
 
-  const setState: SetState<T> = () => {
-    throw new Error("Not Implemented: SetState");
+  const setState: SetState<T> = (partial, replace = false) => {
+    const patch =
+      typeof partial === "function"
+        ? (partial as (state: T) => Partial<T>)(state)
+        : partial;
+
+    const nextState = replace ? (patch as T) : Object.assign({}, state, patch);
+
+    if (nextState === state) return;
+
+    const previousState = state;
+    state = nextState;
+
+    listeners.forEach((listener) => listener(state, previousState));
   };
 
   const destroy = () => {
-    throw new Error("Not Implemented: Destroy");
+    listeners.clear();
   };
 
   const api: StoreApi<T> = {
@@ -58,10 +70,24 @@ export function create<T extends State>(
 
 // Testing remove later:
 
-const defaultState = {
-  hello: "World",
-} as const;
+const counter = create<{
+  hello: number;
+}>((set) => ({
+  hello: 1,
+}));
 
-const store = create(() => defaultState);
+const unsubscribe = counter.subscribe((newVal, oldVal) => {
+  console.log("changed from", oldVal, "to", newVal);
+});
 
-console.log(store.getState(), "hey ---");
+console.log(counter.getState()); // 0
+counter.setState((n) => ({
+  hello: n.hello + 1,
+}));
+// should log: “changed from 0 to 1”
+console.log(counter.getState()); // 1
+
+unsubscribe();
+counter.setState((n) => ({
+  hello: n.hello + 2,
+}));
