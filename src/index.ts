@@ -22,4 +22,46 @@ export interface StoreApi<T extends State> {
 
 export function create<T extends State>(
   initializer: (set: SetState<T>, get: GetState<T>, api: StoreApi<T>) => T
-) {}
+): StoreApi<T> {
+  let state: T;
+  const listeners = new Set<StateListener<T>>();
+
+  const getState: GetState<T> = () => state;
+
+  const subscribe = (listener: StateListener<T>): ReturnVoidFn => {
+    listeners.add(listener);
+
+    return () => {
+      listeners.delete(listener);
+    };
+  };
+
+  const setState: SetState<T> = () => {
+    throw new Error("Not Implemented: SetState");
+  };
+
+  const destroy = () => {
+    throw new Error("Not Implemented: Destroy");
+  };
+
+  const api: StoreApi<T> = {
+    getState,
+    setState,
+    subscribe,
+    destroy,
+  };
+
+  state = initializer(setState, getState, api);
+
+  return api;
+}
+
+// Testing remove later:
+
+const defaultState = {
+  hello: "World",
+} as const;
+
+const store = create(() => defaultState);
+
+console.log(store.getState(), "hey ---");
