@@ -1,6 +1,9 @@
 export type State = object;
 
-export type GetState<T extends State> = () => T;
+export interface GetState<T extends State> {
+  (): T;
+  <U>(select: StateSelector<T, U>): U;
+}
 export type SetState<T extends State> = (
   partial: Partial<T> | ((state: T) => Partial<T>),
   replace?: boolean
@@ -16,25 +19,56 @@ export type Subscribe<T extends State> = (
 export interface StoreApi<T extends State> {
   getState: GetState<T>;
   setState: SetState<T>;
-  subscribe: Subscribe<T>;
   destroy: ReturnVoidFn;
+  subscribe(listener: StateListener<T>): ReturnVoidFn;
+  subscribe<U>(
+    listener: (slice: U, prevSlice: U) => void,
+    selector: StateSelector<T, U>,
+    equalityFn?: EqualityChecker<U>
+  ): ReturnVoidFn;
 }
+
+export type StateSelector<T, U> = (state: T) => U;
+
+export type EqualityChecker<U> = (a: U, b: U) => boolean;
+
+type SubscriberEntry<T, U = T> = {
+  listener: (next: U, prev: U) => void;
+  selector: StateSelector<T, U>;
+  equalityFn: EqualityChecker<U>;
+  prevSlice: U;
+};
 
 export function create<T extends State>(
   initializer: (set: SetState<T>, get: GetState<T>, api: StoreApi<T>) => T
 ): StoreApi<T> {
   let state: T;
-  const listeners = new Set<StateListener<T>>();
+  const subscribers = new Set<SubscriberEntry<T, any>>();
 
-  const getState: GetState<T> = () => state;
+  const getState: GetState<T> = ((selector?: (state: T) => T) => {
+    if (!selector) return state;
 
-  const subscribe = (listener: StateListener<T>): ReturnVoidFn => {
-    listeners.add(listener);
+    return selector(state);
+  }) as GetState<T>;
+
+  function subscribe<U>(
+    listener: (slice: U, prevSlice: U) => void,
+    selector: StateSelector<T, U> = (s) => s as unknown as U,
+    equalityFn: EqualityChecker<U> = Object.is
+  ): ReturnVoidFn {
+    const entry: SubscriberEntry<T, U> = {
+      listener,
+      selector,
+      equalityFn,
+      prevSlice: selector(state),
+    };
+
+    subscribers.add(entry);
 
     return () => {
-      listeners.delete(listener);
+      subscribers.delete(entry);
     };
-  };
+  }
 
   const setState: SetState<T> = (partial, replace = false) => {
     const patch =
@@ -49,11 +83,17 @@ export function create<T extends State>(
     const previousState = state;
     state = nextState;
 
-    listeners.forEach((listener) => listener(state, previousState));
+    for (const entry of subscribers) {
+      const nextSlice = entry.selector(state);
+      if (!entry.equalityFn(entry.prevSlice, nextSlice)) {
+        entry.listener(nextSlice, entry.prevSlice);
+        entry.prevSlice = nextSlice;
+      }
+    }
   };
 
   const destroy = () => {
-    listeners.clear();
+    subscribers.clear();
   };
 
   const api: StoreApi<T> = {
@@ -70,24 +110,25 @@ export function create<T extends State>(
 
 // Testing remove later:
 
-const counter = create<{
-  hello: number;
-}>((set) => ({
-  hello: 1,
-}));
+type ObjectState = { count: number; text: string };
 
-const unsubscribe = counter.subscribe((newVal, oldVal) => {
-  console.log("changed from", oldVal, "to", newVal);
-});
+const store = create<ObjectState>(() => ({ count: 0, text: "hi" }));
 
-console.log(counter.getState()); // 0
-counter.setState((n) => ({
-  hello: n.hello + 1,
-}));
-// should log: “changed from 0 to 1”
-console.log(counter.getState()); // 1
+// 1) Full-state subscription
+store.subscribe((s) => console.log("full:", s));
 
-unsubscribe();
-counter.setState((n) => ({
-  hello: n.hello + 2,
-}));
+// 2) Slice subscription
+store.subscribe(
+  (count, prev) => console.log("count changed:", prev, "→", count),
+  (s) => s.count
+);
+
+// 3) Custom equality (e.g., watch length of text)
+store.subscribe(
+  (len, prevLen) => console.log("text length:", prevLen, "→", len),
+  (s) => s.text.length,
+  (a, b) => a === b
+);
+
+store.setState((s) => ({ count: s.count + 1 }));
+store.setState({ text: "hello" });
